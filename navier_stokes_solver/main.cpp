@@ -4,6 +4,7 @@
 #include "src/EntropyResidual.h"
 #include "src/EntropyViscosity.h"
 #include "src/Functionals.h"
+#include <fstream>
 
 using namespace dolfin;
 
@@ -79,12 +80,12 @@ int main(int argc, char* argv[])
   parameters["std_out_all_processes"] = false;
 
   // Load mesh from file
-  Mesh mesh(argv[5]);
+  auto mesh = std::make_shared<Mesh>(argv[5]);
 
   // Create function spaces
-  Momentum::FunctionSpace V(mesh);
-  Continuity::FunctionSpace Q(mesh);
-  EntropyResidual::FunctionSpace W(mesh);
+  auto V = std::make_shared<Momentum::FunctionSpace>(mesh);
+  auto Q = std::make_shared<Continuity::FunctionSpace>(mesh);
+  auto W = std::make_shared<EntropyResidual::FunctionSpace>(mesh);
 
   // Set parameter values
   int num_samples = atoi(argv[1]);
@@ -93,18 +94,18 @@ int main(int argc, char* argv[])
   double T = atof(argv[4]);
 
   double CFL = 1.0;
-  double dt = CFL * mesh.hmin();
+  double dt = CFL * mesh->hmin();
   dt = T/(double)((uint)(T/dt)); 
-  
+
   // Define values for boundary conditions
-  Inflow u_in(speed);
-  Constant zero(0);
-  Constant zero_vector(0, 0);
+  auto u_in = std::make_shared<Inflow>(speed);
+  auto zero = std::make_shared<Constant>(0);
+  auto zero_vector = std::make_shared<Constant>(0, 0);
 
   // Define subdomains for boundary conditions
-  NoslipDomain  noslip_domain;
-  InflowDomain  inflow_domain;
-  OutflowDomain outflow_domain;
+  auto noslip_domain = std::make_shared<NoslipDomain>();
+  auto inflow_domain = std::make_shared<InflowDomain>();
+  auto outflow_domain = std::make_shared<OutflowDomain>();
 
   // Define boundary conditions
   DirichletBC noslip(V, zero_vector, noslip_domain);
@@ -121,17 +122,17 @@ int main(int argc, char* argv[])
   bcp.push_back(&outflow);
 
   // Create functions
-  Function u0(V);
-  Function u(V);
-  Function p(Q);
-  Function p0(Q);
-  Function res(W);
-  Function mu(W);
+  auto u0 = std::make_shared<Function>(V);
+  auto u = std::make_shared<Function>(V);
+  auto p = std::make_shared<Function>(Q);
+  auto p0 = std::make_shared<Function>(Q);
+  auto res = std::make_shared<Function>(W);
+  auto mu = std::make_shared<Function>(W);
 
   // Create coefficients
-  Constant k(dt);
-  Constant nu(visc);
-  Constant f(0, 0);
+  auto k = std::make_shared<Constant>(dt);
+  auto nu = std::make_shared<Constant>(visc);
+  auto f = std::make_shared<Constant>(0, 0);
 
   // Create forms
   Momentum::BilinearForm amom(V, V);
@@ -144,14 +145,15 @@ int main(int argc, char* argv[])
   Functionals::Form_lift L(mesh, p);
   Functionals::Form_drag D(mesh, p);
   // Mark cylinder
-  FacetFunction<std::size_t> markers(mesh, 1);
+  //FacetFunction<std::size_t> markers(mesh, 1);
+  auto markers = std::make_shared<FacetFunction<std::size_t>>(mesh, 1);
   Wing wing;
-  wing.mark(markers, 1);
+  
+  wing.mark(*markers, 1);
   // Attach markers to functionals
   L.ds = markers;
   D.ds = markers;
 
-  
   // Set coefficients
   amom.k = k; amom.u0 = u0; 
   amom.nu = nu; 
@@ -199,26 +201,26 @@ int main(int argc, char* argv[])
     assemble(bmom, Lmom);
     for (std::size_t i = 0; i < bcu.size(); i++)
       bcu[i]->apply(Amom, bmom);
-    solve(Amom, *u.vector(), bmom, "gmres", "ilu");
+    solve(Amom, *u->vector(), bmom, "gmres", "ilu");
 
     // Pressure correction
     assemble(bcon, Lcon);
     for (std::size_t i = 0; i < bcp.size(); i++)
       bcp[i]->apply(Acon, bcon);
-    solve(Acon, *p.vector(), bcon, "cg");
+    solve(Acon, *p->vector(), bcon, "cg");
 
     // Compute artificial viscosity
-    assemble(*res.vector(), Lres);
-    compute_entropy_viscosity(mesh, res, u, mu);
+    assemble(*res->vector(), Lres);
+    compute_entropy_viscosity(*mesh, *res, *u, *mu);
 
     // Save to file
     t_save += dt;
     if (t_save > T/(double)(num_samples) || t >= T-dt)
       {
-	ufile << u;
-	pfile << p;
-	// resfile << res;
-	// mufile << mu;
+	ufile << *u;
+	pfile << *p;
+	// resfile << *res;
+	// mufile << *mu;
 	t_save = 0.0;
       }
 
@@ -232,16 +234,20 @@ int main(int argc, char* argv[])
 
     // Time-stepping monitor
     Function res_u(V), res_p(Q);
-    res_u = u - u0;
-    res_p = p - p0;
+    *res_u.vector() = *u->vector();
+    *res_u.vector() -= *u0->vector();
+
+    *res_p.vector() = *p->vector();
+    *res_p.vector() -= *p0->vector();
+
     set_log_active(true);
     info("l2(u) = %e, l2(p) = %e, k = %lf, t = %lf, iter_time = %f sec", 
 	 res_u.vector()->norm("l2"), res_p.vector()->norm("l2"), dt, t, toc() );
     set_log_active(false);
 
     // Move to next time step
-    u0 = u;
-    p0 = p;
+    *u0->vector() = *u->vector();
+    *p0->vector() = *p->vector();
     t += dt;
 
   }

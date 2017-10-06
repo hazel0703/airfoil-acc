@@ -6,7 +6,7 @@ using namespace dolfin;
 void compute_entropy_viscosity(Mesh& mesh, Function& res, Function& u, Function& mu)
 {
   double Cm = 0.25;
-  double Ce = 1.0;
+  double Ce = 0.5;
 
   std::vector<dolfin::la_index> res_dofs = res.function_space()->dofmap()->dofs();
   std::vector<dolfin::la_index> u_dofs = u.function_space()->dofmap()->dofs();
@@ -67,7 +67,7 @@ void compute_entropy_viscosity(Mesh& mesh, Function& res, Function& u, Function&
         h = std::min(h, (*ed).length());
       
       mu_arr[cid] = std::min(Cm * (vloc_K + 1.0) * h, 
-      			     Ce * h*h * fabs(res_arr[cid]) / (u_inf + 1e-6)); 
+			     Ce * h*h * fabs(res_arr[cid]) / (u_inf + 1e-6)); 
     }
   mu.vector()->set_local(mu_arr);
 };
