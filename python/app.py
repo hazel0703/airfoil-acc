@@ -28,6 +28,14 @@ def get_parameters():
     else:
         return "None or not enough parameters! (You need 5 parameters)"
 
+@app.route("/list")
+def list_files():
+    l = []
+    files = os.listdir(RESULTS_FOLDER)
+    for f in files:
+        l.append(f)
+    return str(l)
+
 @app.route("/results/<filename>")
 def get_file(filename):
     return send_from_directory(RESULTS_FOLDER, filename)
