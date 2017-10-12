@@ -1,15 +1,25 @@
 import os, subprocess
 from flask import Flask, request, send_from_directory
+from celery import Celery
 
 dir = os.path.dirname(__file__)
 RESULTS_FOLDER = os.path.join(dir, '../results/')
+RUNME_FOLDER = os.path.join(dir, 'murtazo/cloudnaca/')
 
 app = Flask(__name__)
 
-if __name__ == "__main__":
-    app.run(debug = True, host = '0.0.0.0')
+#####
+
+celery = Celery('flask_app')
+celery.config_from_object('celeryconfig')
 
 #####
+@celery.task()
+def runme(parameters):
+    args = parameters
+    subprocess.call(['./runme.sh', args['arg1'], args['arg2'], args['arg3'], args['arg4'], args['arg5']],
+                    cwd=RUNME_FOLDER)
+####
 
 @app.route("/")
 def hello():
@@ -21,12 +31,12 @@ def hello():
 @app.route("/parameters")
 def get_parameters():
     if 'arg1'and 'arg2' and 'arg3' and 'arg4' and 'arg5' in request.args:
-        args = request.args
-        for key in args:
-            if args[key] == '':
+        parameters = request.args
+        for key in parameters:
+            if parameters[key] == '':
                 return "argument null detected!"
         else:
-            subprocess.call(['./runme.sh', args['arg1'], args['arg2'], args['arg3'], args['arg4'], args['arg5']])
+            result = runme.delay(parameters)
             return "runme.sh succeed to run!"
     else:
         return "None or not enough parameters! (You need 5 parameters)"
